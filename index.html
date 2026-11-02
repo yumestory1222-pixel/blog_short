@@ -62,6 +62,15 @@ input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); 
 .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
 .checks label { display: flex; gap: 6px; align-items: center; color: var(--ink); margin: 0; font-size: 14px; }
 details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.auto-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.auto-item { font-size: 13px; }
+.auto-item video { width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 12px; display: block; }
+.auto-item .t { font-weight: 700; margin: 6px 0 2px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.auto-item .m { color: var(--muted); font-size: 12px; }
+.auto-item .btns { margin-top: 6px; gap: 6px; }
+.auto-item .btns a, .auto-item .btns button { font-size: 12px; padding: 6px 9px; text-decoration: none; }
+.auto-item a.dl { background: var(--accent); color: var(--accent-ink); border-radius: 10px; font-weight: 700; }
+#autoMore { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -72,6 +81,12 @@ details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
 <main>
   <div>
+    <section class="card" id="autoCard" hidden>
+      <h2>🎬 자동으로 만든 쇼츠 (음성 포함)</h2>
+      <p class="hint" style="margin-top:0">새 블로그 글이 올라오면 대본·음성·영상까지 자동으로 만들어집니다. 내려받아 바로 올리세요.</p>
+      <div id="autoList" class="auto-list"></div>
+    </section>
+
     <section class="card">
       <h2><span class="step">1</span>블로그 글 넣기</h2>
       <label for="postPick">이 블로그의 글 불러오기</label>

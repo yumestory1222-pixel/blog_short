@@ -615,9 +615,74 @@
   $("bgmVol").addEventListener("input", (e) => bgmGain && bgmGain.gain.setValueAtTime(+e.target.value, actx.currentTime));
 
   // 글꼴이 준비된 뒤 첫 화면
-  Promise.all([document.fonts.load(`100px "Black Han Sans"`), document.fonts.load(`700 50px "Noto Sans KR"`)])
+  const fontsReady = Promise.all([document.fonts.load(`100px "Black Han Sans"`), document.fonts.load(`700 50px "Noto Sans KR"`)])
     .catch(() => {})
     .then(() => { draw(0); state.scenes.length && draw(state.t); });
+
+  // 자동 영상 생성(tools/make_video.py)용: 대본을 넣고 프레임 단위로 그린다
+  window.ShortsApp = {
+    ready: () => fontsReady.then(() => document.fonts.ready),
+    load(script, opts = {}) {
+      state.script = script;
+      state.hook = script.hook;
+      state.scenes = script.scenes.map((s) => ({ ...s }));
+      if (opts.theme) $("theme").value = opts.theme;
+      $("headline").value = opts.headline || "";
+      if (opts.handle !== undefined) $("handle").value = opts.handle;
+      return totalDur();
+    },
+    frame(t, quality = 0.92) {
+      draw(t);
+      return canvas.toDataURL("image/jpeg", quality);
+    },
+  };
   draw(0);
   loadPosts();
+  loadVideos();
+
+  // ---------- 자동 생성 영상 목록 (videos/index.json) ----------
+  async function loadVideos() {
+    let list;
+    try {
+      const res = await fetch("videos/index.json", { cache: "no-store" });
+      if (!res.ok) return;
+      list = await res.json();
+    } catch (_) { return; }
+    if (!list.length) return;
+    const box = $("autoList");
+    let shown = 0;
+    const more = document.createElement("button");
+    more.id = "autoMore";
+    more.textContent = "더 보기";
+    const addPage = () => {
+      list.slice(shown, shown + 6).forEach((v) => {
+        const el = document.createElement("div");
+        el.className = "auto-item";
+        el.innerHTML = `<video controls preload="metadata" playsinline></video><div class="t"></div><div class="m"></div>
+          <div class="btns"><a class="dl" download>⬇ MP4</a><button type="button">캡션 복사</button></div>`;
+        el.querySelector("video").src = v.video + "#t=0.8";
+        el.querySelector(".t").textContent = v.title;
+        el.querySelector(".m").textContent = `${v.date} · ${v.duration}초 · ${v.voice}`;
+        const a = el.querySelector("a");
+        a.href = v.video;
+        a.download = `${v.slug}.mp4`;
+        const btn = el.querySelector("button");
+        btn.addEventListener("click", async () => {
+          try {
+            const txt = await (await fetch(v.caption, { cache: "no-store" })).text();
+            await navigator.clipboard.writeText(txt);
+            btn.textContent = "복사됨";
+          } catch (_) { btn.textContent = "복사 실패"; }
+          setTimeout(() => (btn.textContent = "캡션 복사"), 1200);
+        });
+        box.appendChild(el);
+      });
+      shown += 6;
+      more.hidden = shown >= list.length;
+    };
+    more.addEventListener("click", addPage);
+    addPage();
+    box.after(more);
+    $("autoCard").hidden = false;
+  }
 })();

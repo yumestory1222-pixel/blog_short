@@ -20,7 +20,22 @@
 | `index.html` | 화면 |
 | `script.js` | 글 → 대본(훅·포인트·CTA) 규칙 기반 생성 |
 | `app.js` | 캔버스 렌더링, 미리보기, 녹화 |
+| `tools/make_video.py` | 음성 포함 MP4 자동 생성 |
+| `.github/workflows/shorts.yml` | posts.json 변경 시 자동 실행 |
 | `posts.json` | 「글 불러오기」 목록 (`tools/build_posts.py` 로 생성) |
+
+## 음성 포함 쇼츠 자동 생성
+
+`posts.json` 이 바뀌면 GitHub Actions(「쇼츠 자동 생성」)가 아직 영상이 없는 글마다
+
+1. 대본 생성(`script.js`) → 2. 장면별 Edge 신경망 음성(`edge-tts`, 기본 선희) →
+3. 장면 길이를 음성 길이에 맞춤 → 4. 웹과 같은 캔버스 렌더러로 30fps 렌더링 → 5. ffmpeg 로 MP4 합성
+
+을 거쳐 `videos/<날짜>-<해시>.mp4` 와 캡션(`.txt`)을 커밋합니다. 사이트 맨 위 「자동으로 만든 쇼츠」에서 보고 내려받습니다.
+Actions 탭 → 쇼츠 자동 생성 → *Run workflow* 로 특정 글을 다른 목소리·스타일로 다시 만들 수 있습니다.
+
+로컬 실행: `python tools/make_video.py --new` (node, ffmpeg, `pip install edge-tts playwright` 필요)
+- `edge-tts` 는 마이크로소프트 Edge 의 읽어주기 서비스를 쓰는 비공식 도구입니다. 상업적 이용 조건이 명확하지 않으니 참고하세요.
 
 ## 블로그 글 목록 갱신
 
