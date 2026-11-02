@@ -111,7 +111,7 @@
     state.scenes.forEach((s, i) => {
       const row = document.createElement("div");
       row.className = "scene";
-      const tag = s.kind === "hook" ? "훅" : s.kind === "cta" ? "마무리" : `포인트 ${state.scenes.slice(0, i).filter((x) => x.kind === "point").length + 1}`;
+      const tag = `${i + 1}컷 · ` + (s.kind === "hook" ? "훅" : s.kind === "sub" ? "훅2" : s.kind === "cta" ? "마무리" : "내용");
       row.innerHTML = `<div class="tag"></div><textarea rows="2"></textarea><div><input type="number" min="1" max="20" step="0.5" aria-label="초"><div class="hint" style="text-align:center;margin:2px 0 0">초</div></div>`;
       row.querySelector(".tag").textContent = tag;
       const ta = row.querySelector("textarea");
@@ -141,9 +141,18 @@
   }
 
   function renderOutputs() {
-    const points = state.scenes.filter((s) => s.kind === "point").map((s) => "✔ " + s.text.replace(/\s*\|\s*/, ": ").replace(/\n/g, " "));
+    // 같은 라벨의 연속 컷은 한 줄로 묶는다
+    const points = [];
+    let prevLabel = null;
+    state.scenes.filter((s) => s.kind === "point").forEach((s) => {
+      const m = s.text.replace(/\n/g, " ").match(/^(.{1,14}?)\s*\|\s*(.+)$/);
+      const label = m ? m[1] : "", body = m ? m[2] : s.text.replace(/\n/g, " ");
+      if (label && label === prevLabel) points[points.length - 1] += " " + body;
+      else points.push("✔ " + (label ? label + ": " : "") + body);
+      prevLabel = label || null;
+    });
     $("caption").value = `${state.hook}\n\n${points.join("\n")}\n\n자세한 내용은 프로필 링크에서 확인하세요.\n\n${state.script.hashtags.join(" ")}`;
-    $("narration").value = state.scenes.map((s) => s.text.replace(/\n/g, " ").replace(/\s*\|\s*/g, ", ")).join("\n");
+    $("narration").value = S.narrationLines(state.scenes).join("\n");
   }
 
   const totalDur = () => state.scenes.reduce((a, s) => a + (+s.dur || 0), 0);
@@ -340,9 +349,9 @@
     if (pipe) { label = pipe[1]; body = pipe[2]; }
     else if (s.kind === "point") label = s.label || "";
 
-    const isHook = s.kind === "hook";
+    const isHook = s.kind === "hook" || s.kind === "sub";
     const isCta = s.kind === "cta";
-    const start = isHook ? 124 : 104;
+    const start = isHook ? 128 : 120; // 2초 컷은 글이 짧아 크게
     const fit = fitText(body, DISPLAY, start, 64, W - 150, isHook ? 4 : 5);
     const lh = fit.size * 1.32;
     const blockH = lh * fit.lines.length + (label ? 130 : 0);
@@ -409,8 +418,8 @@
     }
 
     // 장면 시작 플래시
-    if (lt < 0.12 && i > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - lt / 0.12)})`;
+    if (lt < 0.1 && i > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.18 * (1 - lt / 0.1)})`;
       ctx.fillRect(0, 0, W, H);
     }
     ctx.restore();
@@ -454,12 +463,12 @@
   }
   function stopBgm() { if (bgmEl) bgmEl.pause(); }
 
-  function speakScene(s) {
+  function speakScene(i) {
     if (!$("tts").checked || state.recording || !("speechSynthesis" in window)) return;
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(s.text.replace(/\s*\|\s*/g, ", ").replace(/\n/g, " "));
+    const u = new SpeechSynthesisUtterance(S.narrationLines(state.scenes)[i] || "");
     u.lang = "ko-KR";
-    u.rate = 1.15;
+    u.rate = 1.35; // 2초 컷에 맞춰 빠르게
     speechSynthesis.speak(u);
   }
 
@@ -494,7 +503,13 @@
         return;
       }
       const cur = sceneAt(t);
-      if (cur.i !== lastIdx) { lastIdx = cur.i; blip(cur.s.kind); speakScene(cur.s); }
+      if (cur.i !== lastIdx) {
+        // 효과음은 훅과 새 항목이 시작될 때만 (2초 컷마다 울리면 시끄럽다)
+        const prev = state.scenes[cur.i - 1];
+        if (!prev || prev.kind !== cur.s.kind || (prev.label || "") !== (cur.s.label || "")) blip(cur.s.kind);
+        lastIdx = cur.i;
+        speakScene(cur.i);
+      }
       if (bgmEl && !faded && t >= fadeAt) { faded = true; bgmGain.gain.linearRampToValueAtTime(0, actx.currentTime + 0.9); }
       state.t = t;
       $("seek").value = t;
