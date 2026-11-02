@@ -208,16 +208,17 @@ def make_one(page, post: dict, args, work: Path) -> dict:
         raw = work / f"{slug}-{i}-raw.mp3"
         mp3 = work / f"{slug}-{i}.mp3"
         tts(fix_reading(lines[i] if i < len(lines) else narration_text(s)), raw, args.voice, args.rate, args.tts)
-        lead = 0.08  # 화면이 뜬 뒤 말 시작
-        room = s["dur"] - lead - 0.12  # 다음 컷 전에 말이 끝나야 함
+        lead = 0.05  # 화면이 뜬 뒤 말 시작
+        room = s["dur"] - lead - 0.08  # 다음 컷 전에 말이 끝나야 함
         speak = audio_len(raw)
         if speak > room:
-            # 컷 길이(2초)에 맞춰 빠르게 (음높이 유지). 1.6배를 넘으면 컷을 조금 늘린다
-            speed = min(speak / room, 1.6)
+            # 컷 길이(2초)에 맞춰 빠르게 (음높이 유지). 1.8배를 넘으면 그 컷만 조금 늘린다
+            speed = min(speak / room, 1.8)
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-filter:a", f"atempo={speed:.3f}", str(mp3)], check=True)
             speak = audio_len(mp3)
             if speak > room:
-                s["dur"] = round(speak + lead + 0.12, 2)
+                print(f"  · {i + 1}컷 음성이 길어 {speak + lead + 0.08:.1f}초로 늘림: {lines[i] if i < len(lines) else ''}")
+                s["dur"] = round(speak + lead + 0.08, 2)
         else:
             mp3 = raw
         clips.append((t + lead, mp3))
@@ -288,7 +289,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=3, help="한 번에 만들 최대 개수 (--new)")
     ap.add_argument("--duration", type=int, default=30, help="대본 목표 길이(초). 실제 길이는 음성에 맞춰짐")
     ap.add_argument("--voice", default="ko-KR-SunHiNeural", help=", ".join(VOICES))
-    ap.add_argument("--rate", default="+20%", help="말하기 속도, 예: +0%%, +20%%")
+    ap.add_argument("--rate", default="+30%", help="말하기 속도, 예: +0%%, +20%%")
     ap.add_argument("--theme", default="pop", choices=["pop", "news", "pastel"])
     ap.add_argument("--handle", default="@서울우리동네정책")
     ap.add_argument("--bgm", help="배경 음악 파일 (선택)")

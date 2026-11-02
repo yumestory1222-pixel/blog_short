@@ -331,14 +331,15 @@
     return { title: post.title, hook, hooks, scenes, narration: narrationLines(scenes).join("\n"), caption, hashtags: [...new Set(tags)].map((t) => "#" + t) };
   }
 
-  /** 컷별 읽을 문장: 라벨은 그 항목의 첫 컷에서만 읽는다 */
+  /** 컷별 읽을 문장 (라벨은 화면에 보이므로 짧을 때만 읽음) */
   function narrationLines(scenes) {
     let prev = null;
     return scenes.map((s) => {
       const m = s.text.match(/^(.{1,14}?)\s*\|\s*([\s\S]+)$/);
       const label = m ? m[1] : "";
       const body = (m ? m[2] : s.text).replace(/\n/g, " ");
-      const line = label && label !== prev ? `${label}, ${body}` : body;
+      // 라벨은 화면에만 (2초 안에 읽으려면 본문만). 단, 본문이 아주 짧으면 첫 컷에서 라벨도 읽는다
+      const line = label && label !== prev && body.length + label.length <= 14 ? `${label}, ${body}` : body;
       prev = label || null;
       return line.replace(/…/g, "").replace(/\s+/g, " ").trim();
     });
