@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import concurrent.futures
 import functools
 import hashlib
 import http.server
@@ -81,9 +82,12 @@ def tts(text: str, out: Path, voice: str, rate: str, engine: str) -> None:
         write_tone(out.with_suffix(".wav"), 0.12 * len(text) + 0.3, 220, 0.05)
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(out.with_suffix(".wav")), str(out)], check=True)
         return
+    err: Exception | None = None
     for attempt in range(3):
         try:
-            asyncio.run(_edge_tts(text, out, voice, rate))
+            # Playwright(sync)가 이미 이벤트 루프를 돌리고 있어 별도 스레드에서 실행
+            with concurrent.futures.ThreadPoolExecutor(1) as ex:
+                ex.submit(asyncio.run, _edge_tts(text, out, voice, rate)).result(timeout=60)
             if out.stat().st_size > 0:
                 return
         except Exception as e:  # 일시 오류 재시도
