@@ -44,7 +44,7 @@ VOICES = {
 
 # ---------- 대본 ----------
 def slug_of(post: dict) -> str:
-    h = hashlib.sha1(post["title"].encode("utf-8")).hexdigest()[:8]
+    h = hashlib.sha1((post.get("url") or post["title"]).encode("utf-8")).hexdigest()[:8]
     return f"{post['date']}-{h}"
 
 
@@ -136,7 +136,7 @@ def serve() -> tuple[http.server.ThreadingHTTPServer, int]:
 
 
 def render(page, script: dict, opts: dict, audio: Path, out: Path) -> float:
-    total = page.evaluate("([s, o]) => ShortsApp.load(s, o)", [script, opts])
+    total = page.evaluate("async ([s, o]) => await ShortsApp.load(s, o)", [script, opts])
     n = int(math.ceil(total * FPS))
     ff = subprocess.Popen(
         [
@@ -213,6 +213,7 @@ def make_one(page, post: dict, args, work: Path) -> dict:
 
     district = script.get("district") or post.get("district") or ""
     opts = {"theme": args.theme, "handle": args.handle, "headline": f"{district} 새 소식" if district else ""}
+    opts["images"] = post.get("image_data", [])
     VIDEOS.mkdir(exist_ok=True)
     out = VIDEOS / f"{slug}.mp4"
     render(page, script, opts, mix, out)
@@ -229,7 +230,31 @@ def make_one(page, post: dict, args, work: Path) -> dict:
         "slug": slug, "title": post["title"], "date": post["date"], "district": district,
         "video": f"videos/{slug}.mp4", "caption": f"videos/{slug}.txt",
         "duration": round(total, 1), "voice": VOICES.get(args.voice, args.voice),
+        **({"source": post["url"]} if post.get("url") else {}),
     }
+
+
+def load_url(url: str) -> dict:
+    """블로그 주소 → 글 + 배경 그림(data URL)"""
+    import datetime
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    from fetch_post import download, fetch, normalize_url
+
+    post = fetch(url)
+    post["date"] = datetime.date.today().isoformat()
+    post["image_data"] = []
+    for src in post["images"]:
+        got = download(src, normalize_url(url))
+        if got:
+            data, ctype = got
+            post["image_data"].append(f"data:{ctype};base64," + base64.b64encode(data).decode())
+        if len(post["image_data"]) >= 8:
+            break
+    print(f"· {post['title']} — 본문 {len(post['md'])}자, 그림 {len(post['image_data'])}/{len(post['images'])}장")
+    if len(post["md"]) < 50:
+        raise SystemExit(f"본문을 읽지 못했습니다: {url}")
+    return post
 
 
 def main() -> None:
@@ -239,6 +264,7 @@ def main() -> None:
     g.add_argument("--new", action="store_true", help="영상이 아직 없는 글만")
     g.add_argument("--only", help="posts.json 순번(0부터) 또는 slug, 쉼표로 여러 개")
     g.add_argument("--all", action="store_true", help="모든 글 다시 만들기")
+    g.add_argument("--url", nargs="+", help="블로그 주소로 만들기 (본문 그림을 배경으로 사용)")
     ap.add_argument("--limit", type=int, default=3, help="한 번에 만들 최대 개수 (--new)")
     ap.add_argument("--duration", type=int, default=30, help="대본 목표 길이(초). 실제 길이는 음성에 맞춰짐")
     ap.add_argument("--voice", default="ko-KR-SunHiNeural", help=", ".join(VOICES))
@@ -255,7 +281,9 @@ def main() -> None:
     index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
     done = {v["slug"] for v in index}
 
-    if args.only:
+    if args.url:
+        todo = [load_url(u) for u in args.url]
+    elif args.only:
         keys = [k.strip() for k in args.only.split(",")]
         todo = [p for i, p in enumerate(posts) if str(i) in keys or slug_of(p) in keys]
     elif args.all:

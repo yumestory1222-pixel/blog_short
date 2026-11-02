@@ -8,6 +8,10 @@ on:
     paths: [posts.json]
   workflow_dispatch:
     inputs:
+      url:
+        description: "블로그 주소 (여러 개면 띄어쓰기로 구분). 넣으면 이 글로 만들고 글 속 그림을 배경으로 씀"
+        required: false
+        default: ""
       only:
         description: "다시 만들 글 (posts.json 순번, 0이 최신, 쉼표로 여러 개). 비우면 새 글만"
         required: false
@@ -46,15 +50,17 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q ffmpeg fonts-noto-cjk
-          pip install -q edge-tts playwright
+          pip install -q edge-tts playwright requests beautifulsoup4
           python -m playwright install --with-deps chromium
       - name: 영상 만들기
         env:
+          URLS: ${{ inputs.url }}
           ONLY: ${{ inputs.only }}
           VOICE: ${{ inputs.voice || 'ko-KR-SunHiNeural' }}
           THEME: ${{ inputs.theme || 'pop' }}
         run: |
-          if [ -n "$ONLY" ]; then SEL=(--only "$ONLY"); else SEL=(--new --limit 10); fi
+          if [ -n "$URLS" ]; then read -ra U <<< "$URLS"; SEL=(--url "${U[@]}")
+          elif [ -n "$ONLY" ]; then SEL=(--only "$ONLY"); else SEL=(--new --limit 10); fi
           python tools/make_video.py "${SEL[@]}" --voice "$VOICE" --theme "$THEME"
       - name: 커밋
         if: always()

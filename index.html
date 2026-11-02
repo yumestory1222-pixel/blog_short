@@ -36,7 +36,7 @@ section.card { background: var(--panel); border: 1px solid var(--line); border-r
 h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
 h2 .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-input[type=text], select, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+input[type=text], input[type=url], select, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
 textarea { resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
@@ -71,6 +71,10 @@ details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 .auto-item .btns a, .auto-item .btns button { font-size: 12px; padding: 6px 9px; text-decoration: none; }
 .auto-item a.dl { background: var(--accent); color: var(--accent-ink); border-radius: 10px; font-weight: 700; }
 #autoMore { margin-top: 10px; }
+.url-row { display: flex; gap: 8px; }
+.url-row input { flex: 1; min-width: 0; }
+.url-row button { white-space: nowrap; }
+button.linkish { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12.5px; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -81,14 +85,15 @@ details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
 <main>
   <div>
-    <section class="card" id="autoCard" hidden>
-      <h2>🎬 자동으로 만든 쇼츠 (음성 포함)</h2>
-      <p class="hint" style="margin-top:0">새 블로그 글이 올라오면 대본·음성·영상까지 자동으로 만들어집니다. 내려받아 바로 올리세요.</p>
-      <div id="autoList" class="auto-list"></div>
-    </section>
-
     <section class="card">
       <h2><span class="step">1</span>블로그 글 넣기</h2>
+      <label for="blogUrl">블로그 주소 (네이버 블로그·티스토리·일반 웹페이지)</label>
+      <div class="url-row">
+        <input type="url" id="blogUrl" inputmode="url" placeholder="https://blog.naver.com/아이디/글번호">
+        <button class="primary" id="importBtn" type="button">불러오기</button>
+      </div>
+      <p class="hint">글 내용으로 대본을 만들고, 글에 들어 있는 그림을 장면 배경으로 씁니다.
+        <button type="button" id="autoReq" class="linkish">🎙 음성 포함 영상으로 자동 생성 →</button></p>
       <label for="postPick">이 블로그의 글 불러오기</label>
       <select id="postPick"><option value="">— 글을 고르거나 아래에 직접 붙여 넣으세요 —</option></select>
       <label for="title">제목</label>
@@ -159,6 +164,12 @@ details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
         <textarea id="narration" rows="7" style="margin-top:8px"></textarea>
         <div class="btns"><button data-copy="narration">대본 복사</button></div>
       </details>
+    </section>
+
+    <section class="card" id="autoCard" hidden>
+      <h2>🎬 자동으로 만든 쇼츠 (음성 포함)</h2>
+      <p class="hint" style="margin-top:0">새 블로그 글이 올라오면 대본·음성·영상까지 자동으로 만들어집니다. 내려받아 바로 올리세요.</p>
+      <div id="autoList" class="auto-list"></div>
     </section>
   </div>
 

@@ -563,6 +563,95 @@
 
   function status(msg) { $("status").textContent = msg; }
 
+
+  // ---------- 이미지 불러오기 ----------
+  /** 주소 목록 → 불러온 Image 목록 (실패·작은 그림 제외). 외부 그림은 crossOrigin 으로 받아야 녹화가 된다 */
+  function loadImages(srcs, { cors = false, minW = 0, timeout = 15000 } = {}) {
+    return Promise.all(
+      srcs.map((src) => new Promise((res) => {
+        const im = new Image();
+        if (cors) im.crossOrigin = "anonymous";
+        const t = setTimeout(() => res(null), timeout);
+        im.onload = () => { clearTimeout(t); res(im.naturalWidth >= minW ? im : null); };
+        im.onerror = () => { clearTimeout(t); res(null); };
+        im.src = src;
+      }))
+    ).then((a) => a.filter(Boolean));
+  }
+
+  // ---------- 블로그 주소로 불러오기 ----------
+  // 브라우저는 다른 사이트를 직접 읽을 수 없어(CORS) 공개 리더(r.jina.ai)와 이미지 프록시(images.weserv.nl)를 거친다
+  const READER = "https://r.jina.ai/";
+  const IMG_PROXY = (u) => "https://images.weserv.nl/?url=" + encodeURIComponent(u) + "&w=1080&output=jpg&q=85";
+  const SKIP_IMG = /sticker|emoji|emoticon|profile|favicon|logo|icon|blank|spacer|btn_|ico_|\.svg|\.gif(\?|$)/i;
+
+  function normalizeBlogUrl(url) {
+    try {
+      const u = new URL(url.trim());
+      if (/(^|\.)blog\.naver\.com$/.test(u.hostname)) {
+        const id = u.searchParams.get("blogId"), no = u.searchParams.get("logNo");
+        if (id && no) return `https://m.blog.naver.com/${id}/${no}`;
+        const parts = u.pathname.split("/").filter(Boolean);
+        if (parts.length >= 2 && /^\d+$/.test(parts[1])) return `https://m.blog.naver.com/${parts[0]}/${parts[1]}`;
+      }
+      return u.href;
+    } catch (_) { return ""; }
+  }
+
+  function fixImg(src) {
+    if (/pstatic\.net/.test(src)) {
+      src = src.replace("postfiles.pstatic.net", "mblogthumb-phinf.pstatic.net").replace(/\?type=\w+/, "") + "?type=w966";
+    }
+    return src;
+  }
+
+  async function importFromUrl() {
+    const url = normalizeBlogUrl($("blogUrl").value);
+    if (!url) { status("블로그 주소를 정확히 넣어 주세요. (https:// 로 시작)"); return; }
+    $("importBtn").disabled = true;
+    status("블로그 글을 읽는 중… (10초 정도 걸릴 수 있어요)");
+    try {
+      const res = await fetch(READER + url);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const txt = await res.text();
+      const title = ((txt.match(/^Title:\s*(.+)$/m) || [])[1] || "").replace(/\s*[:|-]\s*네이버 블로그$/, "").trim();
+      const body = txt.split(/^Markdown Content:\s*$/m)[1] || txt;
+      const imgs = [...body.matchAll(/!\[[^\]]*\]\((https?:[^)\s]+)/g)].map((m) => fixImg(m[1])).filter((u) => !SKIP_IMG.test(u));
+      const text = body
+        .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, "")
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+        .replace(/^\s*\[[^\]]*\]\([^)]*\)\s*$/gm, "") // 링크만 있는 줄(메뉴 등)
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      if (text.length < 50) throw new Error("본문이 너무 짧음");
+      $("title").value = title;
+      $("raw").value = text;
+      $("headline").value = "";
+      status(`글을 읽었어요. 그림 ${Math.min(imgs.length, 8)}장 불러오는 중…`);
+      const uniq = [...new Set(imgs)].slice(0, 8);
+      state.images = await loadImages(uniq.map(IMG_PROXY), { cors: true, minW: 300 });
+      state.sourceUrl = $("blogUrl").value.trim();
+      generate();
+      status(state.images.length
+        ? `완료! 블로그 그림 ${state.images.length}장을 장면 배경으로 썼어요.`
+        : "글은 불러왔지만 그림을 가져오지 못해 기본 배경을 써요. 「배경 사진」으로 직접 올릴 수도 있어요.");
+    } catch (e) {
+      status("이 주소는 브라우저에서 읽지 못했어요. 아래 「음성 포함 자동 생성」을 쓰거나 본문을 복사해 붙여 넣어 주세요.");
+    } finally {
+      $("importBtn").disabled = false;
+    }
+  }
+
+  $("importBtn").addEventListener("click", importFromUrl);
+  $("blogUrl").addEventListener("keydown", (e) => e.key === "Enter" && importFromUrl());
+  $("autoReq").addEventListener("click", async () => {
+    const url = $("blogUrl").value.trim();
+    if (!/^https?:\/\//.test(url)) { status("먼저 블로그 주소를 넣어 주세요."); return; }
+    try { await navigator.clipboard.writeText(url); } catch (_) {}
+    window.open("https://github.com/yumestory1222-pixel/blog_short/actions/workflows/shorts.yml", "_blank", "noopener");
+    status("주소를 복사했어요. 열린 GitHub 화면에서 「Run workflow」 → 「블로그 주소」 칸에 붙여 넣고 실행하면 3~5분 뒤 위 목록에 음성 포함 영상이 올라와요.");
+  });
+
   // ---------- 이벤트 ----------
   $("gen").addEventListener("click", () => generate());
   $("duration").addEventListener("change", () => state.script && generate(true));
@@ -595,9 +684,7 @@
     })
   );
   $("bgImgs").addEventListener("change", async (e) => {
-    state.images = await Promise.all(
-      [...e.target.files].map((f) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = URL.createObjectURL(f); }))
-    ).then((a) => a.filter(Boolean));
+    state.images = await loadImages([...e.target.files].map((f) => URL.createObjectURL(f)));
     draw(state.t);
   });
   $("bgm").addEventListener("change", (e) => {
@@ -622,7 +709,8 @@
   // 자동 영상 생성(tools/make_video.py)용: 대본을 넣고 프레임 단위로 그린다
   window.ShortsApp = {
     ready: () => fontsReady.then(() => document.fonts.ready),
-    load(script, opts = {}) {
+    async load(script, opts = {}) {
+      state.images = await loadImages(opts.images || []);
       state.script = script;
       state.hook = script.hook;
       state.scenes = script.scenes.map((s) => ({ ...s }));
