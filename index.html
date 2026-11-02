@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>블로그 쇼츠 메이커</title>
+<meta name="description" content="블로그 글을 붙여 넣으면 30초 세로 쇼츠 영상(1080×1920)으로 바꿔 줍니다. 브라우저에서만 동작합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=block" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --ink: #17171a; --muted: #6b6b73; --line: #e3e3e0;
+  --accent: #ff3b5c; --accent-ink: #ffffff; --chip: #f0f0ee; --focus: #2f6bff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111114; --panel: #1b1b20; --ink: #f2f2f4; --muted: #9a9aa3; --line: #2c2c33; --chip: #26262d;
+  }
+}
+:root[data-theme="dark"] { --bg: #111114; --panel: #1b1b20; --ink: #f2f2f4; --muted: #9a9aa3; --line: #2c2c33; --chip: #26262d; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Noto Sans KR", system-ui, sans-serif; }
+header { padding: 20px 16px 8px; max-width: 1180px; margin: 0 auto; }
+header h1 { margin: 0; font: 900 24px/1.2 "Noto Sans KR", sans-serif; letter-spacing: -0.02em; }
+header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+header a { color: inherit; }
+main { max-width: 1180px; margin: 0 auto; padding: 8px 16px 48px; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+@media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } .preview { position: static !important; order: -1; } }
+section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+h2 .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+input[type=text], select, textarea { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+textarea { resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
+button { font: inherit; font-weight: 700; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 10px; padding: 9px 14px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+button:disabled { opacity: .5; cursor: default; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.hooks { display: flex; flex-direction: column; gap: 6px; }
+.hooks label { display: flex; gap: 8px; align-items: center; margin: 0; color: var(--ink); font-size: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+.scene { display: grid; grid-template-columns: 74px minmax(0, 1fr) 64px; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px dashed var(--line); }
+.scene:first-child { border-top: 0; }
+.scene .tag { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 9px; }
+.scene input[type=number] { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+.total { font-weight: 700; }
+.total.warn { color: var(--accent); }
+.preview { position: sticky; top: 12px; }
+.phone { background: #000; border-radius: 22px; padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+canvas#stage { display: block; width: 100%; aspect-ratio: 9 / 16; border-radius: 16px; background: #222; }
+input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); }
+.status { font-size: 13px; color: var(--muted); min-height: 1.5em; margin-top: 8px; }
+.out textarea { font-size: 13.5px; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
+.checks label { display: flex; gap: 6px; align-items: center; color: var(--ink); margin: 0; font-size: 14px; }
+details summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>블로그 → 30초 쇼츠 메이커</h1>
+  <p>글을 붙여 넣으면 훅·핵심 포인트·행동 유도로 대본을 짜고, 1080×1920 세로 영상으로 내려받을 수 있습니다. 모든 처리는 이 브라우저 안에서만 이뤄집니다.</p>
+</header>
+
+<main>
+  <div>
+    <section class="card">
+      <h2><span class="step">1</span>블로그 글 넣기</h2>
+      <label for="postPick">이 블로그의 글 불러오기</label>
+      <select id="postPick"><option value="">— 글을 고르거나 아래에 직접 붙여 넣으세요 —</option></select>
+      <label for="title">제목</label>
+      <input type="text" id="title" placeholder="예: 노원구 중증장애인 차량 리프트 설치 최대 1120만 원 지원">
+      <label for="raw">본문 (마크다운·일반 글 모두 가능)</label>
+      <textarea id="raw" rows="9" placeholder="블로그 본문을 붙여 넣으세요. '- 대상: …', '- 기간: …' 같은 요약 목록이 있으면 그대로 핵심 포인트가 됩니다."></textarea>
+      <div class="row">
+        <div>
+          <label for="duration">길이</label>
+          <select id="duration"><option value="15">15초</option><option value="30" selected>30초</option><option value="45">45초</option><option value="60">60초</option></select>
+        </div>
+        <div>
+          <label for="theme">스타일</label>
+          <select id="theme">
+            <option value="pop">팝 (검정+노랑 강조)</option>
+            <option value="news">뉴스 속보</option>
+            <option value="pastel">파스텔 정보카드</option>
+          </select>
+        </div>
+      </div>
+      <div class="btns"><button class="primary" id="gen">대본 만들기</button></div>
+    </section>
+
+    <section class="card" id="scriptCard" hidden>
+      <h2><span class="step">2</span>훅 고르기 · 장면 다듬기</h2>
+      <p class="hint" style="margin-top:0">첫 3초가 조회수를 결정합니다. "나와 관련 있다"는 신호(지역·금액·마감)가 있는 훅을 고르세요.</p>
+      <div class="hooks" id="hooks"></div>
+      <label>장면 (한 화면에 한 가지 정보, 15~25자 정도가 가장 잘 읽힙니다. "라벨 | 내용" 형식이면 라벨이 위에 작게 붙습니다.)</label>
+      <div id="scenes"></div>
+      <p class="hint">전체 길이 <span class="total" id="total">0초</span></p>
+      <div class="btns"><button id="addScene">장면 추가</button></div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>꾸미기</h2>
+      <div class="row">
+        <div>
+          <label for="headline">상단 고정 제목 (비우면 숨김)</label>
+          <input type="text" id="headline" placeholder="예: 노원구 새 지원사업">
+        </div>
+        <div>
+          <label for="handle">채널 이름</label>
+          <input type="text" id="handle" value="@서울우리동네정책">
+        </div>
+      </div>
+      <label for="bgImgs">배경 사진 (여러 장이면 장면마다 돌아가며 사용, 없으면 움직이는 그라데이션)</label>
+      <input type="file" id="bgImgs" accept="image/*" multiple>
+      <label for="bgm">배경 음악 (선택, 저작권 없는 음원을 쓰세요)</label>
+      <input type="file" id="bgm" accept="audio/*">
+      <div class="row">
+        <div><label for="bgmVol">음악 볼륨</label><input type="range" id="bgmVol" min="0" max="1" step="0.05" value="0.35"></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="sfx" checked> 장면 전환 효과음</label>
+        <label><input type="checkbox" id="progress" checked> 상단 진행 바</label>
+        <label><input type="checkbox" id="tts"> 미리보기에서 대본 읽어주기</label>
+      </div>
+      <p class="hint">읽어주기 음성은 브라우저 기능이라 내려받는 영상에는 담기지 않습니다. 내레이션은 아래 대본으로 직접 녹음하거나 편집 앱의 TTS를 쓰세요.</p>
+    </section>
+
+    <section class="card out" id="outCard" hidden>
+      <h2><span class="step">4</span>올릴 때 쓸 글</h2>
+      <label for="caption">설명(캡션) + 해시태그</label>
+      <textarea id="caption" rows="8"></textarea>
+      <div class="btns"><button data-copy="caption">캡션 복사</button></div>
+      <details style="margin-top:12px">
+        <summary>내레이션 대본</summary>
+        <textarea id="narration" rows="7" style="margin-top:8px"></textarea>
+        <div class="btns"><button data-copy="narration">대본 복사</button></div>
+      </details>
+    </section>
+  </div>
+
+  <aside class="preview">
+    <div class="phone"><canvas id="stage" width="1080" height="1920" aria-label="쇼츠 미리보기"></canvas></div>
+    <input type="range" id="seek" min="0" max="30" step="0.01" value="0" aria-label="재생 위치">
+    <div class="btns">
+      <button id="play">▶ 미리보기</button>
+      <button class="primary" id="rec">⬇ 영상 내려받기</button>
+      <button id="thumb">썸네일 PNG</button>
+    </div>
+    <div class="status" id="status">글을 넣고 「대본 만들기」를 누르세요.</div>
+    <p class="hint">영상은 실시간으로 녹화되므로 길이만큼(예: 30초) 걸립니다. 녹화 중에는 이 탭을 띄워 두세요. 크롬은 MP4, 그 밖의 브라우저는 WebM으로 저장될 수 있습니다.</p>
+  </aside>
+</main>
+
+<script src="script.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
