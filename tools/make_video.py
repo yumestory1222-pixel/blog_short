@@ -357,7 +357,9 @@ def main() -> None:
         (ROOT / "sources").mkdir(exist_ok=True)
         for u in args.url:
             data = fetch(u)
-            out = ROOT / "sources" / f"{slug_of({'url': u, 'title': ''})}.json"
+            import datetime
+
+            out = ROOT / "sources" / f"{slug_of({'url': u, 'title': '', 'date': datetime.date.today().isoformat()})}.json"
             out.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
             print(f"· {out.relative_to(ROOT)}  {data['title']}  본문 {len(data['md'])}자, 그림 {len(data['images'])}장")
         return
