@@ -233,7 +233,9 @@ def make_one(page, post: dict, args, work: Path) -> dict:
     mix_audio(clips, sfx, total, Path(args.bgm) if args.bgm else None, mix)
 
     district = script.get("district") or post.get("district") or ""
-    opts = {"theme": args.theme, "handle": args.handle, "headline": f"{district} 새 소식" if district else ""}
+    # 다른 블로그 글(--url)은 채널 이름을 넣으라고 할 때만 표시
+    handle = args.handle if args.handle is not None else ("" if post.get("url") else "@서울우리동네정책")
+    opts = {"theme": args.theme, "handle": handle, "headline": f"{district} 새 소식" if district else ""}
     opts["images"] = post.get("image_data", [])
     VIDEOS.mkdir(exist_ok=True)
     out = VIDEOS / f"{slug}.mp4"
@@ -291,7 +293,7 @@ def main() -> None:
     ap.add_argument("--voice", default="ko-KR-SunHiNeural", help=", ".join(VOICES))
     ap.add_argument("--rate", default="+30%", help="말하기 속도, 예: +0%%, +20%%")
     ap.add_argument("--theme", default="pop", choices=["pop", "news", "pastel"])
-    ap.add_argument("--handle", default="@서울우리동네정책")
+    ap.add_argument("--handle", default=None, help="마무리 컷 채널 이름 (기본: 블로그 글은 @서울우리동네정책, --url 은 표시 안 함)")
     ap.add_argument("--bgm", help="배경 음악 파일 (선택)")
     ap.add_argument("--no-sfx", action="store_true", help="장면 전환 효과음 끄기")
     ap.add_argument("--tts", default="edge", choices=["edge", "beep"], help="beep: 음성 없이 파이프라인 시험")

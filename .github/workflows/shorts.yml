@@ -12,6 +12,10 @@ on:
         description: "블로그 주소 (여러 개면 띄어쓰기로 구분). 넣으면 이 글로 만들고 글 속 그림을 배경으로 씀"
         required: false
         default: ""
+      handle:
+        description: "마무리 컷에 넣을 채널 이름 (예: @다정카페). 비우면 블로그 주소 글은 표시 안 함"
+        required: false
+        default: ""
       only:
         description: "다시 만들 글 (posts.json 순번, 0이 최신, 쉼표로 여러 개). 비우면 새 글만"
         required: false
@@ -58,10 +62,12 @@ jobs:
           ONLY: ${{ inputs.only }}
           VOICE: ${{ inputs.voice || 'ko-KR-SunHiNeural' }}
           THEME: ${{ inputs.theme || 'pop' }}
+          HANDLE: ${{ inputs.handle }}
         run: |
           if [ -n "$URLS" ]; then read -ra U <<< "$URLS"; SEL=(--url "${U[@]}")
           elif [ -n "$ONLY" ]; then SEL=(--only "$ONLY"); else SEL=(--new --limit 10); fi
-          python tools/make_video.py "${SEL[@]}" --voice "$VOICE" --theme "$THEME"
+          EXTRA=(); if [ -n "$HANDLE" ]; then EXTRA=(--handle "$HANDLE"); fi
+          python tools/make_video.py "${SEL[@]}" --voice "$VOICE" --theme "$THEME" "${EXTRA[@]}"
       - name: 커밋
         if: always()
         run: |

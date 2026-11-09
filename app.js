@@ -356,6 +356,19 @@
     const lh = fit.size * 1.32;
     const blockH = lh * fit.lines.length + (label ? 130 : 0);
     let y = H * 0.5 - blockH / 2 + (head ? 60 : 0);
+    // 사진 배경이면 글자 뒤에 반투명 판을 깔아 읽기 쉽게 (사진 속 글씨와 겹치지 않게)
+    if (state.images.length) {
+      ctx.font = `${fit.size}px ${DISPLAY}`;
+      const wMax = Math.max(...fit.lines.map((l) => ctx.measureText(l).width), label ? 300 : 0);
+      const padX = 56, padY = 44;
+      const bw = Math.min(W - 60, wMax + padX * 2);
+      ctx.save();
+      ctx.globalAlpha = 0.72 * clamp(lt / 0.15);
+      ctx.fillStyle = "#0d0d12";
+      roundRect((W - bw) / 2, y - padY, bw, blockH + padY * 2, 36);
+      ctx.fill();
+      ctx.restore();
+    }
     const inT = clamp(lt / 0.35);
     const outT = clamp((d - lt) / 0.2);
 
@@ -642,6 +655,7 @@
       $("title").value = title;
       $("raw").value = text;
       $("headline").value = "";
+      if ($("handle").value === "@서울우리동네정책") $("handle").value = ""; // 다른 블로그 글엔 이 채널 이름을 넣지 않음
       status(`글을 읽었어요. 그림 ${Math.min(imgs.length, 8)}장 불러오는 중…`);
       const uniq = [...new Set(imgs)].slice(0, 8);
       state.images = await loadImages(uniq.map(IMG_PROXY), { cors: true, minW: 300 });

@@ -119,6 +119,11 @@
     for (const w of URGENT_WORDS) if (s.includes(w)) score += 1;
     if (s.length > 90) score -= 2;
     if (/문의|전화|☎/.test(s)) score -= 1;
+    // 일반 블로그 글: 방법·팁·주의 같은 정보성 문장 우대, 대화·인용·인사말은 뒤로
+    if (/방법|팁|주의|꼭|가능|필요|추천|중요|차이|기준|순서|비용|가격|기간/.test(s)) score += 1.5;
+    if (/^["'“‘「]|["”’」]$/.test(s)) score -= 4;
+    if (/안녕하세요|감사합니다|이웃님|오늘은|포스팅|블로그/.test(s)) score -= 3;
+    if (s.length < 15) score -= 2;
     return score;
   }
 
@@ -158,6 +163,13 @@
   }
 
   /** 훅 후보 여러 개 */
+  /** "답례품 스티커, 문구만 있어도 예쁘게 만들어드려요" → "문구만 있어도 예쁘게 만들어드려요" */
+  function titleHookOf(title) {
+    const parts = String(title || "").split(/\s*[,，:|!?]\s*/).map((p) => p.trim()).filter((p) => p.length >= 4);
+    const pick = parts.length > 1 ? parts.slice(1).join(" ") : parts[0] || "";
+    return pick.length > 26 ? "" : pick;
+  }
+
   function makeHooks(post) {
     const all = [post.title, ...post.facts.map((f) => f.value), ...post.sentences];
     const district = detectDistrict(all.join(" "), post.title);
@@ -174,7 +186,10 @@
     const hooks = [];
     if (money) hooks.push(`${money}, 그냥 놓치실 건가요?`);
     if (dm) hooks.push(`${dm}까지 모르면 끝입니다`);
-    hooks.push(`${who}이면 무조건 저장하세요`);
+    // 지역 글이 아니면(일반 블로그) 제목의 핵심 문장을 훅으로
+    const titleHook = titleHookOf(post.title);
+    if (!district && titleHook) hooks.push(titleHook);
+    if (district) hooks.push(`${who}이면 무조건 저장하세요`);
     if (topic) hooks.push(`${topic}, 아직도 모르세요?`);
     hooks.push("이거 모르면 진짜 손해예요");
     if (topic) hooks.push(`30초로 끝내는 ${topic}`);
@@ -272,7 +287,7 @@
       const key = text.replace(/\s/g, "").slice(0, 14);
       if (!text || seen.has(key)) return;
       seen.add(key);
-      const chunks = trimChunks(chunkText(text), 3);
+      const chunks = trimChunks(chunkText(text), 4);
       if (chunks.length) groups.push({ label, chunks });
     };
     const labelOf = (f) => {
@@ -282,7 +297,8 @@
     };
     const summary = post.facts.filter((f) => f.label && /한눈에|요약|핵심|정리/.test(f.section));
     const labeled = summary.length >= 2 ? summary : post.facts.filter((f) => f.label);
-    (labeled.length >= 2 ? labeled : post.facts)
+    // 라벨 없는 목록은 목차·짧은 항목이 많아 15자 이상만
+    (labeled.length >= 2 ? labeled : post.facts.filter((f) => f.label || f.value.length >= 15))
       .filter((f) => f.value && !/문의|출처|원문/.test(f.label))
       .slice(0, 6)
       .forEach((f) => addGroup(f.label ? labelOf(f) : "", f.value));
@@ -290,6 +306,7 @@
     if (count() < contentCuts) {
       post.sentences
         .map((s, i) => ({ s, i, sc: scoreSentence(s) }))
+        .filter(({ s }) => !/^["'“‘「]/.test(s) && !/안녕하세요|이웃님|포스팅|감사합니다/.test(s)) // 인사말·인용 대화 제외
         .sort((a, b) => b.sc - a.sc)
         .slice(0, 12)
         .sort((a, b) => a.i - b.i)
@@ -304,6 +321,13 @@
       const g = [...groups].sort((a, b) => b.chunks.length - a.chunks.length)[0];
       if (g.chunks.length > 1) g.chunks = trimChunks(g.chunks, g.chunks.length - 1);
       else groups.pop();
+    }
+
+    // 내용이 모자라면 핵심 다시 짚기 컷으로 채운다 (2초 × 컷 수 유지)
+    const recap = groups.map((g) => g.chunks[g.chunks.length - 1].t).filter((t) => /\d/.test(t));
+    const recapAll = recap.length ? recap : groups.map((g) => g.chunks[0].t);
+    for (let k = 0; count() < contentCuts && k < recapAll.length; k++) {
+      groups.push({ label: "다시 한번", chunks: [{ t: recapAll[k], end: true }] });
     }
 
     const content = [];
@@ -373,7 +397,7 @@
     return spans;
   }
 
-  const api = { parsePost, buildScript, chunkText, narrationLines, makeHooks, wrapKorean, numberSpans, punchy, shortTopic, detectDistrict };
+  const api = { titleHookOf, parsePost, buildScript, chunkText, narrationLines, makeHooks, wrapKorean, numberSpans, punchy, shortTopic, detectDistrict };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ShortsScript = api;
 })(typeof window !== "undefined" ? window : globalThis);
