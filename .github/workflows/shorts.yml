@@ -16,6 +16,20 @@ on:
         description: "마무리 컷에 넣을 채널 이름 (예: @다정카페). 비우면 블로그 주소 글은 표시 안 함"
         required: false
         default: ""
+      script:
+        description: "직접 쓴 대본 파일 (예: scripts/2026-11-09-62ebf071.json). 넣으면 이 대본으로 만듦"
+        required: false
+        default: ""
+      mode:
+        description: "할 일"
+        type: choice
+        options: [영상 만들기, 글만 가져오기]
+        default: 영상 만들기
+      narration:
+        description: "음성"
+        type: choice
+        options: [음성 있음, 음성 없음]
+        default: 음성 있음
       only:
         description: "다시 만들 글 (posts.json 순번, 0이 최신, 쉼표로 여러 개). 비우면 새 글만"
         required: false
@@ -63,17 +77,23 @@ jobs:
           VOICE: ${{ inputs.voice || 'ko-KR-SunHiNeural' }}
           THEME: ${{ inputs.theme || 'pop' }}
           HANDLE: ${{ inputs.handle }}
+          SCRIPT: ${{ inputs.script }}
+          MODE: ${{ inputs.mode || '영상 만들기' }}
+          NARRATION: ${{ inputs.narration || '음성 있음' }}
         run: |
-          if [ -n "$URLS" ]; then read -ra U <<< "$URLS"; SEL=(--url "${U[@]}")
+          if [ -n "$SCRIPT" ]; then SEL=(--script "$SCRIPT")
+          elif [ -n "$URLS" ]; then read -ra U <<< "$URLS"; SEL=(--url "${U[@]}")
           elif [ -n "$ONLY" ]; then SEL=(--only "$ONLY"); else SEL=(--new --limit 10); fi
           EXTRA=(); if [ -n "$HANDLE" ]; then EXTRA=(--handle "$HANDLE"); fi
+          if [ "$NARRATION" = "음성 없음" ]; then EXTRA+=(--tts none); fi
+          if [ "$MODE" = "글만 가져오기" ]; then EXTRA+=(--fetch-only); fi
           python tools/make_video.py "${SEL[@]}" --voice "$VOICE" --theme "$THEME" "${EXTRA[@]}"
       - name: 커밋
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add videos
+          git add videos sources 2>/dev/null || git add videos
           if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
           git commit -m "쇼츠 영상 자동 생성"
           git pull --rebase -q origin main

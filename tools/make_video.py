@@ -165,6 +165,9 @@ def render(page, script: dict, opts: dict, audio: Path, out: Path) -> float:
 
 
 def mix_audio(clips: list[tuple[float, Path]], sfx: list[tuple[float, Path]], total: float, bgm: Path | None, out: Path) -> None:
+    if not clips and not sfx and not bgm:  # 소리 없는 영상
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{total:.2f}", str(out)], check=True)
+        return
     inputs: list[str] = []
     parts: list[str] = []
     labels: list[str] = []
@@ -193,7 +196,7 @@ def mix_audio(clips: list[tuple[float, Path]], sfx: list[tuple[float, Path]], to
 # ---------- 전체 ----------
 def make_one(page, post: dict, args, work: Path) -> dict:
     slug = slug_of(post)
-    script = build_script(post, args.duration)
+    script = post.get("script") or build_script(post, args.duration)
     scenes = script["scenes"]
     clips: list[tuple[float, Path]] = []
     sfx: list[tuple[float, Path]] = []
@@ -205,6 +208,13 @@ def make_one(page, post: dict, args, work: Path) -> dict:
     t = 0.0
     prev = None
     for i, s in enumerate(scenes):
+        if args.tts == "none":  # 음성 없이: 컷 길이 그대로, 효과음만
+            key = (s["kind"], s.get("label") or "")
+            if not args.no_sfx and key != prev:
+                sfx.append((t, blip_hook if s["kind"] == "hook" else blip))
+            prev = key
+            t += s["dur"]
+            continue
         raw = work / f"{slug}-{i}-raw.mp3"
         mp3 = work / f"{slug}-{i}.mp3"
         tts(fix_reading(lines[i] if i < len(lines) else narration_text(s)), raw, args.voice, args.rate, args.tts)
@@ -247,6 +257,8 @@ def make_one(page, post: dict, args, work: Path) -> dict:
         + "\n\n자세한 내용은 프로필 링크에서 확인하세요.\n\n"
         + " ".join(script["hashtags"])
     )
+    if post.get("caption_text"):
+        caption = post["caption_text"].rstrip() + ("\n\n" + " ".join(script["hashtags"]) if script["hashtags"] else "")
     (VIDEOS / f"{slug}.txt").write_text(caption + "\n", encoding="utf-8")
     print(f"✔ {out.name}  {total:.1f}초  {post['title']}")
     return {
@@ -280,6 +292,38 @@ def load_url(url: str) -> dict:
     return post
 
 
+def load_script(path: str) -> dict:
+    """직접 쓴 대본(JSON) → 글 + 대본. 형식:
+    {"url": "블로그 주소", "title": "...", "cuts": [{"text": "...", "label": "", "kind": "hook|sub|point|cta"}, ...],
+     "caption": "(선택)", "hashtags": ["#..."]}
+    kind 를 비우면 1컷 hook, 2컷 sub, 마지막 2컷 cta, 나머지 point. 컷마다 dur(초) 생략 시 2초.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    cuts = data["cuts"]
+    n = len(cuts)
+    scenes = []
+    for i, c in enumerate(cuts):
+        kind = c.get("kind") or ("hook" if i == 0 else "sub" if i == 1 else "cta" if i >= n - 2 else "point")
+        label = c.get("label", "")
+        text = c["text"]
+        scenes.append({"kind": kind, "label": label, "text": f"{label} | {text}" if label else text, "dur": float(c.get("dur", 2))})
+    hashtags = data.get("hashtags") or []
+    script = {
+        "title": data.get("title", ""), "hook": cuts[0]["text"].replace("\n", " "), "hooks": [], "scenes": scenes,
+        "narration": "\n".join(c["text"].replace("\n", " ") for c in cuts),
+        "hashtags": hashtags, "district": data.get("district", ""),
+    }
+    post = load_url(data["url"]) if data.get("url") else {"title": data.get("title", ""), "date": "", "md": "", "image_data": []}
+    if not post.get("date"):
+        import datetime
+        post["date"] = datetime.date.today().isoformat()
+    if data.get("title"):
+        post["title"] = data["title"]
+    post["script"] = script
+    post["caption_text"] = data.get("caption")
+    return post
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--posts", default=str(ROOT / "posts.json"))
@@ -288,6 +332,7 @@ def main() -> None:
     g.add_argument("--only", help="posts.json 순번(0부터) 또는 slug, 쉼표로 여러 개")
     g.add_argument("--all", action="store_true", help="모든 글 다시 만들기")
     g.add_argument("--url", nargs="+", help="블로그 주소로 만들기 (본문 그림을 배경으로 사용)")
+    g.add_argument("--script", help="직접 쓴 대본 JSON 으로 만들기 (scripts/*.json, 형식은 load_script 참고)")
     ap.add_argument("--limit", type=int, default=3, help="한 번에 만들 최대 개수 (--new)")
     ap.add_argument("--duration", type=int, default=30, help="대본 목표 길이(초). 실제 길이는 음성에 맞춰짐")
     ap.add_argument("--voice", default="ko-KR-SunHiNeural", help=", ".join(VOICES))
@@ -296,7 +341,8 @@ def main() -> None:
     ap.add_argument("--handle", default=None, help="마무리 컷 채널 이름 (기본: 블로그 글은 @서울우리동네정책, --url 은 표시 안 함)")
     ap.add_argument("--bgm", help="배경 음악 파일 (선택)")
     ap.add_argument("--no-sfx", action="store_true", help="장면 전환 효과음 끄기")
-    ap.add_argument("--tts", default="edge", choices=["edge", "beep"], help="beep: 음성 없이 파이프라인 시험")
+    ap.add_argument("--tts", default="edge", choices=["edge", "none", "beep"], help="none: 음성 없이(효과음만), beep: 파이프라인 시험")
+    ap.add_argument("--fetch-only", action="store_true", help="--url 글의 본문·그림 주소만 sources/<slug>.json 으로 저장")
     args = ap.parse_args()
 
     posts = json.loads(Path(args.posts).read_text(encoding="utf-8"))
@@ -304,7 +350,20 @@ def main() -> None:
     index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
     done = {v["slug"] for v in index}
 
-    if args.url:
+    if args.url and args.fetch_only:
+        sys.path.insert(0, str(ROOT / "tools"))
+        from fetch_post import fetch
+
+        (ROOT / "sources").mkdir(exist_ok=True)
+        for u in args.url:
+            data = fetch(u)
+            out = ROOT / "sources" / f"{slug_of({'url': u, 'title': ''})}.json"
+            out.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            print(f"· {out.relative_to(ROOT)}  {data['title']}  본문 {len(data['md'])}자, 그림 {len(data['images'])}장")
+        return
+    if args.script:
+        todo = [load_script(args.script)]
+    elif args.url:
         todo = [load_url(u) for u in args.url]
     elif args.only:
         keys = [k.strip() for k in args.only.split(",")]
